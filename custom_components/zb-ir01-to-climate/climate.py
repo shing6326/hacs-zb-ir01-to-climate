@@ -16,12 +16,16 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     if discovery_info is None:
         return
     sensor_entity_id = discovery_info.get("sensor_entity_id")
-    async_add_entities([MyACClimateEntity(hass, sensor_entity_id)])
+    climate_name = discovery_info.get("climate_name")
+    climate_id = discovery_info.get("climate_id")
+    async_add_entities([ZBACClimateEntity(hass, sensor_entity_id, climate_name, climate_id)])
 
-class MyACClimateEntity(ClimateEntity):
-    def __init__(self, hass, sensor_entity_id):
+class ZBACClimateEntity(ClimateEntity):
+    def __init__(self, hass, sensor_entity_id, climate_name, climate_id):
         self.hass = hass
         self._sensor_entity_id = sensor_entity_id
+        self._name = climate_name
+        self.entity_id = climate_id
         self._attr_temperature_unit = TEMP_CELSIUS
         self._state = {}
 
@@ -38,7 +42,7 @@ class MyACClimateEntity(ClimateEntity):
 
     @property
     def name(self):
-        return "My AC Controller"
+        return self._name
 
     @property
     def hvac_mode(self):
