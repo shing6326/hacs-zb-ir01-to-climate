@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_state_change
 
 import logging
+import json
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -165,6 +166,39 @@ class ZBACClimateEntity(ClimateEntity):
             _LOGGER.error(f"Error parsing sensor data '{data}': {e}")
             return {}
 
+    async def send_command(self, command):
+        """ Helper function to send command to the climate device. """
+        # Replace with actual method to send the command
+        await self.hass.services.async_call(
+            'text', 'set_value', {
+                "entity_id": "text.0xf4b3b1fffe132df2_send_command",
+                "value": '"'+command+'"'
+            }
+        )
+    
+    async def async_set_temperature(self, **kwargs):
+        temperature = kwargs.get(ATTR_TEMPERATURE)
+        if temperature is not None:
+            hex_code = code['temperature'].get(str(int(temperature)), None)
+            if hex_code:
+                await self.send_command(hex_code)
+    
+    async def async_set_hvac_mode(self, hvac_mode):
+        hex_code = code['mode'].get(hvac_mode, None)
+        if hex_code:
+            await self.send_command(hex_code)
+    
+    async def async_turn_on(self):
+        await self.send_command(code['poweron'])
+    
+    async def async_turn_off(self):
+        await self.send_command(code['poweroff'])
+    
+    async def async_set_fan_mode(self, fan_mode):
+        hex_code = code['fan_speed'].get(fan_mode, None)
+        if hex_code:
+            await self.send_command(hex_code)
+    
     async def async_will_remove_from_hass(self):
         # Unsubscribe from sensor's state changes when entity is removed
         if self._sensor_unsub:
