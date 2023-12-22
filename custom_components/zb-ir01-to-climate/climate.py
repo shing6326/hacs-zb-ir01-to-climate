@@ -109,6 +109,10 @@ class ZBACClimateEntity(ClimateEntity):
         return self._state.get('temperature', 0)
 
     @property
+    def target_temperature_step(self):
+        return 1.0
+
+    @property
     def fan_mode(self):
         return self._state.get('air_volume', 'auto')
 
@@ -146,10 +150,16 @@ class ZBACClimateEntity(ClimateEntity):
         try:
             switch = data[2:4]
             mode = data[4:6]
+            # special handle of fan_only signal, the toshiba remote returns 08ff000603f2 when in fan mode
+            if switch == "ff" and mode == "00":
+                switch = "00"
+                mode = "03"
             # Check if the temperature data slice is correct
             temp_hex = data[6:8]
             temperature = int(temp_hex, 16) + 16
             air_volume = ["auto", "low", "medium", "high"][int(data[8:10], 16)]
+            if switch != "00" and switch != "01" or int(temperature) < 16 or int(temperature) > 32:
+                raise ValueError("Invalid on/off or temperature value")
             return {"switch": switch, "mode": mode, "temperature": temperature, "air_volume": air_volume}
         except ValueError as e:
             _LOGGER.error(f"Error parsing sensor data '{data}': {e}")
