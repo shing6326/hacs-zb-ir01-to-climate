@@ -1,0 +1,9 @@
+{
+  "domain": "zb-ir01-to-climate",
+  "name": "ZB-IR01 to climate plugins",
+  "documentation": "https://github.com/shing6326/hacs-zb-ir01-to-climate",
+  "dependencies": [],
+  "codeowners": [],
+  "requirements": [],
+  "version": "0.1.0"
+}
