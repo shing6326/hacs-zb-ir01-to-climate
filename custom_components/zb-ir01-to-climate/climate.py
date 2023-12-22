@@ -62,7 +62,7 @@ class ZBACClimateEntity(ClimateEntity):
         self.hass = hass
         self._sensor_entity_id = sensor_entity_id
         self._name = climate_name
-        self.entity_id = climate_id
+        self.entity_id = climate_id or None
         self._attr_temperature_unit = TEMP_CELSIUS
         self._state = {}
 
