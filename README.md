@@ -12,7 +12,7 @@ Add the following to your `configuration.yaml` file:
 ```yaml
 # Example configuration.yaml entry
 zb-ir01-to-climate:
-  sensor_entity_id: sensor.0xf4b3b1fffe132df2_last_received_command
+  ir01_entity_id: 0xf4b3b1fffe132df2
   climate_id: climate.my_ac
   climate_name: My AC
 ```
