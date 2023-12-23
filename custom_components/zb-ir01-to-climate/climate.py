@@ -38,8 +38,8 @@ code = {
         "cool": "860101010087",
         "dry": "860101020084",
         "fan_only": "860101030085",
-        "heat": "860101040082"
-        "off": "860100010086",
+        "heat": "860101040082",
+        "off": "860100010086"
     },
     "fan_speed": {
         "auto": "860104000083",
@@ -65,8 +65,7 @@ class ZBACClimateEntity(ClimateEntity):
         self.entity_id = climate_id or None
         self._attr_temperature_unit = TEMP_CELSIUS
 
-        self._current_temperature = "0"
-        self._target_temperature = "0"
+        self._target_temperature = 26
         self._fan_mode = "auto"
         self._hvac_mode = HVAC_MODE_OFF
         self._last_command = ""
@@ -97,10 +96,6 @@ class ZBACClimateEntity(ClimateEntity):
         return [HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_AUTO, HVAC_MODE_DRY, HVAC_MODE_FAN_ONLY]
 
     @property
-    def current_temperature(self):
-        return self._current_temperature
-
-    @property
     def target_temperature(self):
         return self._target_temperature
 
@@ -110,7 +105,7 @@ class ZBACClimateEntity(ClimateEntity):
 
     @property
     def fan_mode(self):
-        return self._fam_mode
+        return self._fan_mode
 
     @property
     def fan_modes(self):
@@ -149,14 +144,13 @@ class ZBACClimateEntity(ClimateEntity):
             if switch == "ff" and mode == "00":
                 switch = "00"
                 mode = "03"
-            # validate parsed value
-            if switch != "00" and switch != "01" or int(temperature) < 16 or int(temperature) > 32:
-                raise ValueError("Invalid on/off or temperature value")
             # Check if the temperature data slice is correct
             temp_hex = data[6:8]
             temperature = int(temp_hex, 16) + 16
+            # validate parsed value
+            if switch != "00" and switch != "01" or int(temperature) < 16 or int(temperature) > 32:
+                raise ValueError("Invalid on/off or temperature value")
             # Set temperature and fan mode
-            self._current_temperature = temperature
             self._target_temperature = temperature
             self._fan_mode = ["auto", "low", "medium", "high"][int(data[8:10], 16)]
             # Set HVAC mode
@@ -192,7 +186,6 @@ class ZBACClimateEntity(ClimateEntity):
         if temperature is not None:
             hex_code = code['temperature'].get(str(int(temperature)), None)
             if hex_code:
-                self._current_temperature = temperature
                 self._target_temperature = temperature
                 await self.send_command(hex_code)
     
