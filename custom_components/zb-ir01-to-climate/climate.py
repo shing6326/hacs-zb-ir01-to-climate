@@ -75,8 +75,10 @@ class ZBACClimateEntity(ClimateEntity):
     async def async_sensor_state_listener(self, entity_id, old_state, new_state):
         if new_state is None:
             return
-        self._state = self.parse_sensor_data(new_state.state)
-        self.async_write_ha_state()  # Update the state in Home Assistant
+        parsed_state = self.parse_sensor_data(new_state.state)
+        if parsed_state:
+            self._state = parsed_state
+            self.async_write_ha_state()  # Update the state in Home Assistant
 
     @property
     def name(self):
@@ -175,6 +177,8 @@ class ZBACClimateEntity(ClimateEntity):
                 "value": '"'+command+'"'
             }
         )
+        self._state['last_command'] = command  # You might want to store more specific state
+        self.async_write_ha_state()  # Inform Home Assistant of state change
     
     async def async_set_temperature(self, **kwargs):
         temperature = kwargs.get(ATTR_TEMPERATURE)
