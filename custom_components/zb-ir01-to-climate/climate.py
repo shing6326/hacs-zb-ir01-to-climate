@@ -52,15 +52,15 @@ code = {
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
     if discovery_info is None:
         return
-    sensor_entity_id = discovery_info.get("sensor_entity_id")
+    ir01_entity_id = discovery_info.get("ir01_entity_id")
     climate_name = discovery_info.get("climate_name")
     climate_id = discovery_info.get("climate_id")
-    async_add_entities([ZBACClimateEntity(hass, sensor_entity_id, climate_name, climate_id)])
+    async_add_entities([ZBACClimateEntity(hass, ir01_entity_id, climate_name, climate_id)])
 
 class ZBACClimateEntity(ClimateEntity):
-    def __init__(self, hass, sensor_entity_id, climate_name, climate_id):
+    def __init__(self, hass, ir01_entity_id, climate_name, climate_id):
         self.hass = hass
-        self._sensor_entity_id = sensor_entity_id
+        self._ir01_entity_id = ir01_entity_id
         self._name = climate_name
         self.entity_id = climate_id or None
         self._attr_temperature_unit = TEMP_CELSIUS
@@ -73,7 +73,7 @@ class ZBACClimateEntity(ClimateEntity):
 
         # Subscribe to changes in the sensor
         self._sensor_unsub = async_track_state_change(
-            self.hass, self._sensor_entity_id, self.async_sensor_state_listener
+            self.hass, "sensor." + self._ir01_entity_id + "_last_received_command", self.async_sensor_state_listener
         )
 
     async def async_sensor_state_listener(self, entity_id, old_state, new_state):
@@ -174,7 +174,7 @@ class ZBACClimateEntity(ClimateEntity):
         # Replace with actual method to send the command
         await self.hass.services.async_call(
             'text', 'set_value', {
-                "entity_id": "text.0xf4b3b1fffe132df2_send_command",
+                "entity_id": "text." + self._ir01_entity_id + "_send_command",
                 "value": '"'+command+'"'
             }
         )

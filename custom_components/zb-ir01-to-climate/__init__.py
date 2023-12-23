@@ -6,7 +6,7 @@ DOMAIN = "zb-ir01-to-climate"
 
 CONFIG_SCHEMA = vol.Schema({
     DOMAIN: vol.Schema({
-        vol.Required("sensor_entity_id"): cv.entity_id,
+        vol.Required("ir01_entity_id"): cv.string,
         vol.Optional("climate_id"): cv.string,  # climate_id is optional
         vol.Required("climate_name"): cv.string,
     }),
@@ -15,7 +15,7 @@ CONFIG_SCHEMA = vol.Schema({
 async def async_setup(hass: HomeAssistant, config: dict):
     # Retrieve configuration
     conf = config[DOMAIN]
-    sensor_entity_id = conf.get("sensor_entity_id")
+    ir01_entity_id = conf.get("ir01_entity_id")
     climate_id = conf.get("climate_id")
     climate_name = conf.get("climate_name")
 
@@ -24,7 +24,7 @@ async def async_setup(hass: HomeAssistant, config: dict):
         discovery.async_load_platform(
             hass, "climate", DOMAIN,
             {
-                "sensor_entity_id": sensor_entity_id,
+                "ir01_entity_id": ir01_entity_id,
                 "climate_id": climate_id,
                 "climate_name": climate_name
             }, config
