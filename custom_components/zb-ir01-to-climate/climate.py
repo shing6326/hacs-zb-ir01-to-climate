@@ -8,6 +8,7 @@ from homeassistant.const import TEMP_CELSIUS
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_state_change
 
+import asyncio
 import logging
 import json
 
@@ -192,12 +193,15 @@ class ZBACClimateEntity(ClimateEntity):
     
     async def async_set_hvac_mode(self, hvac_mode):
         hex_code = code['mode'].get(hvac_mode, None)
+        if self._hvac_mode == HVAC_MODE_OFF and hvac_mode != HVAC_MODE_OFF:
+            await self.send_command(code['mode']['on'])
+            await asyncio.sleep(0.5)
         if hex_code:
             self._hvac_mode = hvac_mode
             await self.send_command(hex_code)
     
     async def async_turn_on(self):
-        await async_set_hvac_mode("on")
+        await async_set_hvac_mode(HVAC_MODE_AUTO)
     
     async def async_turn_off(self):
         await async_set_hvac_mode(HVAC_MODE_OFF)
