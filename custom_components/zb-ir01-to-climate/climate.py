@@ -34,12 +34,13 @@ code = {
         "32": "860102100095"
     },
     "mode": {
+        "on": "860100000087",
+        "off": "860100010086",
         "auto": "860101000086",
         "cool": "860101010087",
         "dry": "860101020084",
         "fan_only": "860101030085",
-        "heat": "860101040082",
-        "off": "860100010086"
+        "heat": "860101040082"
     },
     "fan_speed": {
         "auto": "860104000083",
@@ -196,7 +197,7 @@ class ZBACClimateEntity(ClimateEntity):
             await self.send_command(hex_code)
     
     async def async_turn_on(self):
-        await async_set_hvac_mode(HVAC_MODE_AUTO)
+        await async_set_hvac_mode("on")
     
     async def async_turn_off(self):
         await async_set_hvac_mode(HVAC_MODE_OFF)
