@@ -139,7 +139,7 @@ class ZBACClimateEntity(ClimateEntity):
             return False
         try:
             if not self.verify_checksum(data):
-                raise ValueError(f"Invalid checksum of data '{data}'")
+                raise ValueError(f"Invalid checksum.")
             switch = data[2:4]
             mode = data[4:6]
             # special handle of fan_only signal, the toshiba remote returns 08ff000603f2 when in fan mode
@@ -151,7 +151,7 @@ class ZBACClimateEntity(ClimateEntity):
             temperature = int(temp_hex, 16) + 16
             # validate parsed value
             if switch != "00" and switch != "01" or int(temperature) < 16 or int(temperature) > 32:
-                raise ValueError("Invalid on/off or temperature value")
+                raise ValueError("Invalid on/off or temperature value.")
             # Set temperature and fan mode
             self._target_temperature = temperature
             self._fan_mode = ["auto", "low", "medium", "high"][int(data[8:10], 16)]
@@ -168,7 +168,7 @@ class ZBACClimateEntity(ClimateEntity):
                 }.get(mode, HVAC_MODE_OFF)
             return True
         except ValueError as e:
-            _LOGGER.error(f"Error parsing sensor data '{data}': {e}")
+            _LOGGER.warning(f"Error parsing sensor data '{data}': {e}")
             return False
 
     async def send_command(self, command):
