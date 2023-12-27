@@ -7,6 +7,7 @@ from homeassistant.const import ATTR_TEMPERATURE
 from homeassistant.const import TEMP_CELSIUS
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_state_change
+from homeassistant.helpers.restore_state import RestoreEntity, async_get_last_state
 
 import asyncio
 import logging
@@ -65,7 +66,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     climate_id = discovery_info.get("climate_id")
     async_add_entities([ZBACClimateEntity(hass, ir01_entity_id, climate_name, climate_id)])
 
-class ZBACClimateEntity(ClimateEntity):
+class ZBACClimateEntity(ClimateEntity, RestoreEntity):
     def __init__(self, hass, ir01_entity_id, climate_name, climate_id):
         self.hass = hass
         self._ir01_entity_id = ir01_entity_id
@@ -73,9 +74,9 @@ class ZBACClimateEntity(ClimateEntity):
         self.entity_id = climate_id or None
         self._attr_temperature_unit = TEMP_CELSIUS
 
+        self._hvac_mode = HVAC_MODE_OFF
         self._target_temperature = 26
         self._fan_mode = "auto"
-        self._hvac_mode = HVAC_MODE_OFF
         self._swing_mode = "off"
         self._last_command = ""
         self._last_received_command = ""
@@ -84,6 +85,17 @@ class ZBACClimateEntity(ClimateEntity):
         self._sensor_unsub = async_track_state_change(
             self.hass, "sensor." + self._ir01_entity_id + "_last_received_command", self.async_sensor_state_listener
         )
+
+    async def async_added_to_hass(self):
+        """Handle entity which will be added."""
+        await super().async_added_to_hass()
+        # Restore state after a restart
+        last_state = await async_get_last_state(self.hass, self.entity_id)
+        if last_state:
+            self._hvac_mode = last_state.state
+            self._target_temperature = last_state.attributes.get('temperature')
+            self._fan_mode = last_state.attributes.get('fan_mode')
+            self._swing_mode = last_state.attributes.get('swing_mode')
 
     async def async_sensor_state_listener(self, entity_id, old_state, new_state):
         if new_state is None:
