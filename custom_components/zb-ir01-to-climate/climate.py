@@ -1,7 +1,7 @@
 from homeassistant.components.climate import ClimateEntity
 from homeassistant.components.climate.const import (
     HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_COOL, HVAC_MODE_AUTO, HVAC_MODE_DRY, HVAC_MODE_FAN_ONLY,
-    SUPPORT_TARGET_TEMPERATURE, SUPPORT_FAN_MODE
+    SUPPORT_TARGET_TEMPERATURE, SUPPORT_FAN_MODE, SUPPORT_SWING_MODE
 )
 from homeassistant.const import ATTR_TEMPERATURE
 from homeassistant.const import TEMP_CELSIUS
