@@ -7,7 +7,7 @@ from homeassistant.const import ATTR_TEMPERATURE
 from homeassistant.const import TEMP_CELSIUS
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_state_change
-from homeassistant.helpers.restore_state import RestoreEntity, async_get_last_state
+from homeassistant.helpers.restore_state import RestoreEntity
 
 import asyncio
 import logging
@@ -87,10 +87,11 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
         )
 
     async def async_added_to_hass(self):
-        """Handle entity which will be added."""
+        # Run when entity about to be added
         await super().async_added_to_hass()
+
         # Restore state after a restart
-        last_state = await async_get_last_state(self.hass, self.entity_id)
+        last_state = await self.async_get_last_state()
         if last_state:
             self._hvac_mode = last_state.state
             self._target_temperature = last_state.attributes.get('temperature')
