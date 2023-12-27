@@ -174,7 +174,7 @@ class ZBACClimateEntity(ClimateEntity):
                 raise ValueError("Invalid power value.")
             if not self.is_hex(temp) or not -1 < int(temp, 16) < 16:
                 raise ValueError("Invalid temperature value.")
-            if not self.is_hex(mode) or not -1 < int(mode, 16) < 4:
+            if not self.is_hex(mode) or not -1 < int(mode, 16) < 5:
                 raise ValueError("Invalid hvac mode value.")
             if not self.is_hex(fan) or not -1 < int(fan, 16) < 4:
                 raise ValueError("Invalid fan mode value.")
