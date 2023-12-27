@@ -48,6 +48,12 @@ code = {
         "low": "860104010082",
         "medium": "860104020081",
         "high": "860104030080"
+    },
+    "swing": {
+        "on": "860105000082",
+        "off": "860105010083",
+        "vertical": "860107080088",
+        "horizontal": "860108080087"
     }
 }
 
@@ -70,6 +76,7 @@ class ZBACClimateEntity(ClimateEntity):
         self._target_temperature = 26
         self._fan_mode = "auto"
         self._hvac_mode = HVAC_MODE_OFF
+        self._swing_mode = "off"
         self._last_command = ""
         self._last_received_command = ""
 
@@ -114,9 +121,23 @@ class ZBACClimateEntity(ClimateEntity):
         return ["auto", "low", "medium", "high"]
 
     @property
+    def swing_mode(self):
+        return self._swing_mode
+
+    @property
+    def swing_modes(self):
+        return ["on", "off", "vertical", "horizontal"]
+
+    @property
     def supported_features(self):
         return SUPPORT_TARGET_TEMPERATURE | SUPPORT_FAN_MODE
 
+    def is_hex(self, val):
+        try:
+            int(val, 16)
+            return True
+        except ValueError:
+            return False
 
     def verify_checksum(self, data):
         try:
@@ -140,23 +161,28 @@ class ZBACClimateEntity(ClimateEntity):
         try:
             if not self.verify_checksum(data):
                 raise ValueError(f"Invalid checksum.")
-            switch = data[2:4]
+            power = data[2:4]
             mode = data[4:6]
+            temp = data[6:8]
+            fan = data[8:10]
             # special handle of fan_only signal, the toshiba remote returns 08ff000603f2 when in fan mode
-            if switch == "ff" and mode == "00":
-                switch = "00"
-                mode = "03"
-            # Check if the temperature data slice is correct
-            temp_hex = data[6:8]
-            temperature = int(temp_hex, 16) + 16
+            if power == 'ff' and mode == '00':
+                power = '00'
+                mode = '03'
             # validate parsed value
-            if switch != "00" and switch != "01" or int(temperature) < 16 or int(temperature) > 32:
-                raise ValueError("Invalid on/off or temperature value.")
+            if power != '00' and power != '01':
+                raise ValueError("Invalid power value.")
+            if not self.is_hex(temp) or not -1 < int(temp, 16) < 16:
+                raise ValueError("Invalid temperature value.")
+            if not self.is_hex(mode) or not -1 < int(mode, 16) < 4:
+                raise ValueError("Invalid hvac mode value.")
+            if not self.is_hex(fan) or not -1 < int(fan, 16) < 4:
+                raise ValueError("Invalid fan mode value.")
             # Set temperature and fan mode
-            self._target_temperature = temperature
-            self._fan_mode = ["auto", "low", "medium", "high"][int(data[8:10], 16)]
+            self._target_temperature = int(temp, 16) + 16
+            self._fan_mode = ["auto", "low", "medium", "high"][int(fan, 16)]
             # Set HVAC mode
-            if switch == '01':
+            if power == '01':
                 self._hvac_mode = HVAC_MODE_OFF
             else:
                 self._hvac_mode = {
@@ -190,15 +216,19 @@ class ZBACClimateEntity(ClimateEntity):
             if hex_code:
                 self._target_temperature = temperature
                 await self.send_command(hex_code)
+            else:
+                _LOGGER.warning(f"Error locating code with temperature '{temperature}'.")
     
     async def async_set_hvac_mode(self, hvac_mode):
         hex_code = code['mode'].get(hvac_mode, None)
-        if self._hvac_mode == HVAC_MODE_OFF and hvac_mode != HVAC_MODE_OFF:
-            await self.send_command(code['mode']['on'])
-            await asyncio.sleep(0.5)
         if hex_code:
+            if self._hvac_mode == HVAC_MODE_OFF and hvac_mode != HVAC_MODE_OFF:
+                await self.send_command(code['mode']['on'])
+                await asyncio.sleep(0.5)
             self._hvac_mode = hvac_mode
             await self.send_command(hex_code)
+        else:
+            _LOGGER.warning(f"Error locating code with hvac mode '{hvac_mode}'.")
     
     async def async_turn_on(self):
         await async_set_hvac_mode(HVAC_MODE_AUTO)
@@ -211,7 +241,17 @@ class ZBACClimateEntity(ClimateEntity):
         if hex_code:
             self._fan_mode = fan_mode
             await self.send_command(hex_code)
-    
+        else:
+            _LOGGER.warning(f"Error locating code with fan mode '{fan_mode}'.")
+
+    async def async_set_swing_mode(self, swing_mode):
+        hex_code = code['swing'].get(swing_mode, None)
+        if hex_code:
+            self._swing_mode = swing_mode
+            await self.send_command(hex_code)
+        else:
+            _LOGGER.warning(f"Error locating code with swing mode '{swing_mode}'.")
+
     async def async_will_remove_from_hass(self):
         # Unsubscribe from sensor's state changes when entity is removed
         if self._sensor_unsub:
