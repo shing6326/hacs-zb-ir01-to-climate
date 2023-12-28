@@ -240,10 +240,10 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
             _LOGGER.warning(f"Error locating code with hvac mode '{hvac_mode}'.")
     
     async def async_turn_on(self):
-        await async_set_hvac_mode(HVACMode.AUTO)
+        await self.async_set_hvac_mode(HVACMode.AUTO)
     
     async def async_turn_off(self):
-        await async_set_hvac_mode(HVACMode.OFF)
+        await self.async_set_hvac_mode(HVACMode.OFF)
     
     async def async_set_fan_mode(self, fan_mode):
         hex_code = code['fan'].get(fan_mode, None)
