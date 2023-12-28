@@ -38,12 +38,12 @@ code = {
         "32": "860102100095"
     },
     "mode": {
-        HVACMode.OFF.value: "860100010086",
         HVACMode.AUTO.value: "860101000086",
         HVACMode.COOL.value: "860101010087",
         HVACMode.DRY.value: "860101020084",
         HVACMode.FAN_ONLY.value: "860101030085",
-        HVACMode.HEAT.value: "860101040082"
+        HVACMode.HEAT.value: "860101040082",
+        HVACMode.OFF.value: "860100010086"
     },
     "fan": {
         FAN_AUTO: "860104000083",
@@ -194,18 +194,13 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
                 raise ValueError("Invalid fan mode value.")
             # Set temperature and fan mode
             self._target_temperature = int(temp, 16) + 16
-            self._fan_mode = self.fan_modes[int(fan, 16)]
+            self._fan_mode = self.fan_modes[int(fan)]
             # Set HVAC mode
             if power == '01':
                 self._hvac_mode = HVACMode.OFF
             else:
-                self._hvac_mode = {
-                    '00': HVACMode.AUTO,
-                    '01': HVACMode.COOL,
-                    '02': HVACMode.DRY,
-                    '03': HVACMode.FAN_ONLY,
-                    '04': HVACMode.HEAT
-                }.get(mode, HVACMode.OFF)
+                hvac_mode_keys = list(code['mode'].keys())
+                self._hvac_mode = hvac_mode_keys[int(mode)]
             return True
         except Exception as e:
             _LOGGER.warning(f"Error parsing sensor data '{data}': {e}")
