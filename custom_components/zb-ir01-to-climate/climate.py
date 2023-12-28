@@ -1,10 +1,12 @@
 from homeassistant.components.climate import ClimateEntity
+
 from homeassistant.components.climate.const import (
-    HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_COOL, HVAC_MODE_AUTO, HVAC_MODE_DRY, HVAC_MODE_FAN_ONLY,
-    SUPPORT_TARGET_TEMPERATURE, SUPPORT_FAN_MODE, SUPPORT_SWING_MODE
+    HVACMode, ClimateEntityFeature,
+    FAN_AUTO, FAN_LOW, FAN_MEDIUM, FAN_HIGH,
+    SWING_ON, SWING_OFF, SWING_VERTICAL, SWING_HORIZONTAL
 )
-from homeassistant.const import ATTR_TEMPERATURE
-from homeassistant.const import TEMP_CELSIUS
+
+from homeassistant.const import UnitOfTemperature, ATTR_TEMPERATURE
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_state_change
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -16,6 +18,7 @@ import json
 _LOGGER = logging.getLogger(__name__)
 
 code = {
+    "power_on": "860100000087",
     "temperature": {
         "16": "860102000085",
         "17": "860102010084",
@@ -36,25 +39,24 @@ code = {
         "32": "860102100095"
     },
     "mode": {
-        "on": "860100000087",
-        "off": "860100010086",
-        "auto": "860101000086",
-        "cool": "860101010087",
-        "dry": "860101020084",
-        "fan_only": "860101030085",
-        "heat": "860101040082"
+        HVACMode.OFF.value: "860100010086",
+        HVACMode.AUTO.value: "860101000086",
+        HVACMode.COOL.value: "860101010087",
+        HVACMode.DRY.value: "860101020084",
+        HVACMode.FAN_ONLY.value: "860101030085",
+        HVACMode.HEAT.value: "860101040082"
     },
-    "fan_speed": {
-        "auto": "860104000083",
-        "low": "860104010082",
-        "medium": "860104020081",
-        "high": "860104030080"
+    "fan": {
+        FAN_AUTO: "860104000083",
+        FAN_LOW: "860104010082",
+        FAN_MEDIUM: "860104020081",
+        FAN_HIGH: "860104030080"
     },
     "swing": {
-        "on": "860105000082",
-        "off": "860105010083",
-        "vertical": "860107080088",
-        "horizontal": "860108080087"
+        SWING_ON: "860105000082",
+        SWING_OFF: "860105010083",
+        SWING_VERTICAL: "860107080088",
+        SWING_HORIZONTAL: "860108080087"
     }
 }
 
@@ -72,12 +74,12 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
         self._ir01_entity_id = ir01_entity_id
         self._name = climate_name
         self.entity_id = climate_id or None
-        self._attr_temperature_unit = TEMP_CELSIUS
+        self._attr_temperature_unit = UnitOfTemperature.CELSIUS
 
-        self._hvac_mode = HVAC_MODE_OFF
+        self._hvac_mode = HVACMode.OFF
         self._target_temperature = 26
-        self._fan_mode = "auto"
-        self._swing_mode = "off"
+        self._fan_mode = FAN_AUTO
+        self._swing_mode = SWING_OFF
         self._last_command = ""
         self._last_received_command = ""
 
@@ -115,7 +117,7 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
 
     @property
     def hvac_modes(self):
-        return [HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_AUTO, HVAC_MODE_DRY, HVAC_MODE_FAN_ONLY]
+        return [HVACMode.OFF, HVACMode.COOL, HVACMode.HEAT, HVACMode.AUTO, HVACMode.DRY, HVACMode.FAN_ONLY]
 
     @property
     def target_temperature(self):
@@ -131,7 +133,7 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
 
     @property
     def fan_modes(self):
-        return ["auto", "low", "medium", "high"]
+        return [FAN_AUTO, FAN_LOW, FAN_MEDIUM, FAN_HIGH]
 
     @property
     def swing_mode(self):
@@ -139,11 +141,11 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
 
     @property
     def swing_modes(self):
-        return ["on", "off", "vertical", "horizontal"]
+        return [SWING_ON, SWING_OFF, SWING_VERTICAL, SWING_HORIZONTAL]
 
     @property
     def supported_features(self):
-        return SUPPORT_TARGET_TEMPERATURE | SUPPORT_FAN_MODE | SUPPORT_SWING_MODE
+        return ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.FAN_MODE | ClimateEntityFeature.SWING_MODE
 
     def is_hex(self, val):
         try:
@@ -193,18 +195,18 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
                 raise ValueError("Invalid fan mode value.")
             # Set temperature and fan mode
             self._target_temperature = int(temp, 16) + 16
-            self._fan_mode = ["auto", "low", "medium", "high"][int(fan, 16)]
+            self._fan_mode = self.fan_modes()[int(fan, 16)]
             # Set HVAC mode
             if power == '01':
-                self._hvac_mode = HVAC_MODE_OFF
+                self._hvac_mode = HVACMode.OFF
             else:
                 self._hvac_mode = {
-                    '00': HVAC_MODE_AUTO,
-                    '01': HVAC_MODE_COOL,
-                    '02': HVAC_MODE_DRY,
-                    '03': HVAC_MODE_FAN_ONLY,
-                    '04': HVAC_MODE_HEAT
-                }.get(mode, HVAC_MODE_OFF)
+                    '00': HVACMode.AUTO,
+                    '01': HVACMode.COOL,
+                    '02': HVACMode.DRY,
+                    '03': HVACMode.FAN_ONLY,
+                    '04': HVACMode.HEAT
+                }.get(mode, HVACMode.OFF)
             return True
         except ValueError as e:
             _LOGGER.warning(f"Error parsing sensor data '{data}': {e}")
@@ -235,22 +237,22 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
     async def async_set_hvac_mode(self, hvac_mode):
         hex_code = code['mode'].get(hvac_mode, None)
         if hex_code:
-            if self._hvac_mode == HVAC_MODE_OFF and hvac_mode != HVAC_MODE_OFF:
-                await self.send_command(code['mode']['on'])
-                await asyncio.sleep(0.5)
+            if self._hvac_mode == HVACMode.OFF and hvac_mode != HVACMode.OFF:
+                await self.send_command(code['power_on'])
+                await asyncio.sleep(1)
             self._hvac_mode = hvac_mode
             await self.send_command(hex_code)
         else:
             _LOGGER.warning(f"Error locating code with hvac mode '{hvac_mode}'.")
     
     async def async_turn_on(self):
-        await async_set_hvac_mode(HVAC_MODE_AUTO)
+        await async_set_hvac_mode(HVACMode.AUTO)
     
     async def async_turn_off(self):
-        await async_set_hvac_mode(HVAC_MODE_OFF)
+        await async_set_hvac_mode(HVACMode.OFF)
     
     async def async_set_fan_mode(self, fan_mode):
-        hex_code = code['fan_speed'].get(fan_mode, None)
+        hex_code = code['fan'].get(fan_mode, None)
         if hex_code:
             self._fan_mode = fan_mode
             await self.send_command(hex_code)
