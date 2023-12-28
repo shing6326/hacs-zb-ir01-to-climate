@@ -1,5 +1,4 @@
 from homeassistant.components.climate import ClimateEntity
-
 from homeassistant.components.climate.const import (
     HVACMode, ClimateEntityFeature,
     FAN_AUTO, FAN_LOW, FAN_MEDIUM, FAN_HIGH,
@@ -151,7 +150,7 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
         try:
             int(val, 16)
             return True
-        except ValueError:
+        except:
             return False
 
     def verify_checksum(self, data):
@@ -166,7 +165,7 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
                 calculated_checksum ^= byte
             # Compare the received checksum with the calculated checksum
             return received_checksum == calculated_checksum
-        except ValueError:
+        except:
             # Handle invalid data format
             return False
 
@@ -208,7 +207,7 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
                     '04': HVACMode.HEAT
                 }.get(mode, HVACMode.OFF)
             return True
-        except ValueError as e:
+        except Exception as e:
             _LOGGER.warning(f"Error parsing sensor data '{data}': {e}")
             return False
 
