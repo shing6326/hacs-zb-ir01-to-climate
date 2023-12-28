@@ -179,10 +179,13 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
             mode = data[4:6]
             temp = data[6:8]
             fan = data[8:10]
-            # special handle of fan_only signal, the toshiba remote returns 08ff000603f2 when in fan mode
+            # Toshiba fix for fan mode: sample code received 08ff000603f2
             if power == 'ff' and mode == '00':
                 power = '00'
                 mode = '03'
+            # MHI fix for minimum fan level: sample code received 0800000afffd
+            if fan == 'ff':
+               fan = '01'
             # validate parsed value
             if power != '00' and power != '01':
                 raise ValueError("Invalid power value.")
