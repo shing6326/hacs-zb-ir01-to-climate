@@ -117,7 +117,7 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
 
     @property
     def hvac_modes(self):
-        return [HVACMode.OFF, HVACMode.COOL, HVACMode.HEAT, HVACMode.AUTO, HVACMode.DRY, HVACMode.FAN_ONLY]
+        return list(code['mode'].keys())
 
     @property
     def target_temperature(self):
@@ -133,7 +133,7 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
 
     @property
     def fan_modes(self):
-        return [FAN_AUTO, FAN_LOW, FAN_MEDIUM, FAN_HIGH]
+        return list(code['fan'].keys())
 
     @property
     def swing_mode(self):
@@ -141,7 +141,7 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
 
     @property
     def swing_modes(self):
-        return [SWING_ON, SWING_OFF, SWING_VERTICAL, SWING_HORIZONTAL]
+        return list(code['swing'].keys())
 
     @property
     def supported_features(self):
