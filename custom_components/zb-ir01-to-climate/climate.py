@@ -96,7 +96,6 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
         last_state = await self.async_get_last_state()
         if last_state:
             self._hvac_mode = last_state.state
-            self._current_temperature = last_state.attributes.get('current_temperature')
             self._target_temperature = last_state.attributes.get('temperature')
             self._fan_mode = last_state.attributes.get('fan_mode')
             self._swing_mode = last_state.attributes.get('swing_mode')
