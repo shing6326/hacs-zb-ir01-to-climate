@@ -194,7 +194,7 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
                 raise ValueError("Invalid fan mode value.")
             # Set temperature and fan mode
             self._target_temperature = int(temp, 16) + 16
-            self._fan_mode = self.fan_modes()[int(fan, 16)]
+            self._fan_mode = self.fan_modes[int(fan, 16)]
             # Set HVAC mode
             if power == '01':
                 self._hvac_mode = HVACMode.OFF
