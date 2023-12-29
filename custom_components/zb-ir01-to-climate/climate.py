@@ -76,7 +76,6 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
 
         self._hvac_mode = HVACMode.OFF
-        self._current_temperature = 0
         self._target_temperature = 26
         self._fan_mode = FAN_AUTO
         self._swing_mode = SWING_OFF
@@ -118,10 +117,6 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
     @property
     def hvac_modes(self):
         return list(code['mode'].keys())
-
-    @property
-    def current_temperature(self):
-        return self._current_temperature
 
     @property
     def target_temperature(self):
