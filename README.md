@@ -1,6 +1,6 @@
 # The HA climate object created by easyiot ZB-IR01 with status feedback
 
-This is a minimum implementation of an integration providing a sensor value to sync to a climate object.
+This is a Home Assistant integration providing a sensor value to sync to a climate object.
 
 ### Installation
 
@@ -12,7 +12,7 @@ Add the following to your `configuration.yaml` file:
 ```yaml
 # Example configuration.yaml entry
 zb-ir01-to-climate:
-  ir01_entity_id: 0xf4b3b1fffe132df2
-  climate_id: climate.my_ac
-  climate_name: My AC
+  - ir01_entity_id: 0xf4b3b1fffe132df2
+    climate_id: climate.my_ac
+    climate_name: My AC
 ```
