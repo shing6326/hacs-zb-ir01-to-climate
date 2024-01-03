@@ -12,7 +12,6 @@ from homeassistant.helpers.restore_state import RestoreEntity
 
 import asyncio
 import logging
-import json
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -197,13 +196,13 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
                 raise ValueError("Invalid fan mode value.")
             # Set temperature and fan mode
             self._target_temperature = int(temp, 16) + 16
-            self._fan_mode = self.fan_modes[int(fan)]
+            self._fan_mode = self.fan_modes[int(fan, 16)]
             # Set HVAC mode
             if power == '01':
                 self._hvac_mode = HVACMode.OFF
             else:
                 hvac_mode_keys = list(code['mode'].keys())
-                self._hvac_mode = hvac_mode_keys[int(mode)]
+                self._hvac_mode = hvac_mode_keys[int(mode, 16)]
             return True
         except Exception as e:
             _LOGGER.warning(f"Error parsing sensor data '{data}': {e}")
