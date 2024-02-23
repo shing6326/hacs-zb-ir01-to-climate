@@ -66,6 +66,9 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     async_add_entities([ZBACClimateEntity(hass, ir01_entity_id, climate_name, climate_id)])
 
 class ZBACClimateEntity(ClimateEntity, RestoreEntity):
+
+    _enable_turn_on_off_backwards_compatibility = False
+
     def __init__(self, hass, ir01_entity_id, climate_name, climate_id):
         self.hass = hass
         self._ir01_entity_id = ir01_entity_id
