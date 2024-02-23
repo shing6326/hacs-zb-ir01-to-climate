@@ -142,7 +142,7 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
 
     @property
     def supported_features(self):
-        return ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.FAN_MODE | ClimateEntityFeature.SWING_MODE
+        return ClimateEntityFeature.TURN_ON | ClimateEntityFeature.TURN_OFF | ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.FAN_MODE | ClimateEntityFeature.SWING_MODE
 
     def is_hex(self, val):
         try:
