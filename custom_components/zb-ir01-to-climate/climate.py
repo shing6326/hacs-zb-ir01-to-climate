@@ -6,7 +6,7 @@ from homeassistant.components.climate.const import (
 )
 
 from homeassistant.const import UnitOfTemperature, ATTR_TEMPERATURE
-from homeassistant.helpers.event import async_track_state_change
+from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.restore_state import RestoreEntity
 
 import asyncio
@@ -84,7 +84,7 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
         self._last_received_command = ""
 
         # Subscribe to changes in the sensor
-        self._sensor_unsub = async_track_state_change(
+        self._sensor_unsub = async_track_state_change_event(
             self.hass, "sensor." + self._ir01_entity_id + "_last_received_command", self.async_sensor_state_listener
         )
 
@@ -100,7 +100,10 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
             self._fan_mode = last_state.attributes.get('fan_mode')
             self._swing_mode = last_state.attributes.get('swing_mode')
 
-    async def async_sensor_state_listener(self, entity_id, old_state, new_state):
+    async def async_sensor_state_listener(self, event):
+        entity_id = event.data["entity_id"]
+        old_state = event.data["old_state"]
+        new_state = event.data["new_state"]
         if new_state is None:
             return
         self._last_received_command = new_state.state
