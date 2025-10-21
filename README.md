@@ -12,7 +12,7 @@ Add the following to your `configuration.yaml` file:
 ```yaml
 # Example configuration.yaml entry
 zb-ir01-to-climate:
-  - ir01_entity_id: 0xf4b3b1fffe132df2
-    climate_id: climate.my_ac
-    climate_name: My AC
+  - ir01_entity_id: "0xf4b3b1fffe132df2"
+    climate_id: "climate.my_ac"
+    climate_name: "My AC"
 ```
