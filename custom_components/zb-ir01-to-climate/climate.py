@@ -296,12 +296,17 @@ SWING_HORIZONTAL_MODES_UI: list[str] = [
 # ---------------------------------------------------------------------------
 # Optional status-report quirks (brand-specific malformed 0x08 frames).
 # NOT applied by default. Enable via discovery_info / config:
-#   status_quirks: ["remap_ff_power_mode", "clamp_ff_fan_to_low"]
-# These replace the former hardcoded Toshiba / MHI branches.
+#   status_quirks:
+#     - remap_ff_power_as_on   # needed when power must be 00/01 only (e.g. Panasonic
+#                             # 0xFF → 0x00/ON before the strict power check)
+#     - remap_ff_power_mode    # Toshiba-style: power=0xFF + mode=0x00 → ON + fan_only
+#     - clamp_ff_fan_to_low    # MHI-style: fan=0xFF → low
 # ---------------------------------------------------------------------------
+STATUS_QUIRK_REMAP_FF_POWER_AS_ON = "remap_ff_power_as_on"
 STATUS_QUIRK_REMAP_FF_POWER_MODE = "remap_ff_power_mode"
 STATUS_QUIRK_CLAMP_FF_FAN_TO_LOW = "clamp_ff_fan_to_low"
 KNOWN_STATUS_QUIRKS = {
+    STATUS_QUIRK_REMAP_FF_POWER_AS_ON,
     STATUS_QUIRK_REMAP_FF_POWER_MODE,
     STATUS_QUIRK_CLAMP_FF_FAN_TO_LOW,
 }
@@ -494,10 +499,17 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
 
         Disabled unless listed in discovery_info['status_quirks'].
         """
+        # Toshiba-style (narrow): apply before the broader FF→ON remap so both can
+        # coexist when enabled together without losing the fan_only rewrite.
         if STATUS_QUIRK_REMAP_FF_POWER_MODE in self._status_quirks:
             # Some remotes report power=0xff with mode=0x00 for fan-only-like state.
             if power == "ff" and mode == "00":
                 power, mode = "00", "03"
+        if STATUS_QUIRK_REMAP_FF_POWER_AS_ON in self._status_quirks:
+            # Needed when power must be 00/01 only: remaps 0xFF→0x00 (ON) before the
+            # strict check (e.g. Panasonic 08ff020800fd).
+            if power == "ff":
+                power = "00"
         if STATUS_QUIRK_CLAMP_FF_FAN_TO_LOW in self._status_quirks:
             # Some remotes report fan=0xff for the minimum fan step.
             if fan == "ff":
