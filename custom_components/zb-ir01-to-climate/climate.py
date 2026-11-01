@@ -22,7 +22,6 @@ from homeassistant.components.climate.const import (
     FAN_HIGH,
     FAN_LOW,
     FAN_MEDIUM,
-    FAN_TOP,
     HVACMode,
     PRESET_BOOST,
     PRESET_ECO,
@@ -55,19 +54,7 @@ except AttributeError:  # pragma: no cover - older Core
 
 _LOGGER = logging.getLogger(__name__)
 
-# Fan UI labels: numbered 1..5 + auto (protocol key 4).
-# Protocol: 0=auto, 1=low→"1", 2=mid→"2", 3=high→"3", 4=strong→"4",
-# 5=hurricane→"5", 6=super→also "5" (UI has five numbered speeds; 5 = strongest
-# selectable; protocol 5 and 6 both surface as "5").
-FAN_1 = "1"
-FAN_2 = "2"
-FAN_3 = "3"
-FAN_4 = "4"
-FAN_5 = "5"
-# Legacy string aliases (accepted by set_fan_mode / restore, not listed in UI)
-FAN_STRONG = "strong"
-FAN_HURRICANE = "hurricane"
-FAN_SUPER = "super"
+# Fan modes: HA auto/low/medium/high only (protocol key 4 values 0–3; §3.10).
 
 # Vertical swing (protocol key 7) — used as ClimateEntity.swing_mode
 SWING_VERT_UP = "up"
@@ -99,12 +86,6 @@ SWING_AUTO_SWEEP_OFF = "auto_sweep_off"
 SWING_MANUAL_ON = "manual"
 SWING_MANUAL_OFF = "manual_off"
 SWING_MANUAL_POS = tuple(f"manual_{i}" for i in range(1, 5))  # 1..4
-
-# Custom preset labels beyond HA built-ins (protocol sleep levels 1–3).
-PRESET_SLEEP_1 = "sleep_1"
-PRESET_SLEEP_2 = "sleep_2"
-PRESET_SLEEP_3 = "sleep_3"
-
 
 def _xor_frame(key_id: int, value: int, cmd: int = 0x86, device_type: int = 0x01) -> str:
     """Build a 6-byte IR command hex string with XOR checksum (no spaces)."""
@@ -157,54 +138,20 @@ TEMPERATURE_CODES: dict[str, str] = {
 }
 
 # Fan — protocol key 4 (Table 7 / Appendix 7.1).
-# Status report only feeds back 0..3 (auto/1/2/3). Extended speeds 4..6 are
-# command-only; if seen, 4→"4", 5 and 6→"5".
+# UI + status feedback (§3.10): 0=auto, 1=low, 2=medium, 3=high.
 FAN_MODE_CODES: dict[str, str] = {
     FAN_AUTO: _xor_frame(_KEY_FAN, 0),
-    FAN_1: _xor_frame(_KEY_FAN, 1),
-    FAN_2: _xor_frame(_KEY_FAN, 2),
-    FAN_3: _xor_frame(_KEY_FAN, 3),
-    FAN_4: _xor_frame(_KEY_FAN, 4),
-    # "5" sends hurricane (protocol 5). Protocol 6 (super) is not a separate UI
-    # mode; legacy aliases below can still emit it.
-    FAN_5: _xor_frame(_KEY_FAN, 5),
-    # Legacy HA / prior-integration aliases → same frames (normalized to 1..5/auto)
     FAN_LOW: _xor_frame(_KEY_FAN, 1),
     FAN_MEDIUM: _xor_frame(_KEY_FAN, 2),
     FAN_HIGH: _xor_frame(_KEY_FAN, 3),
-    FAN_STRONG: _xor_frame(_KEY_FAN, 4),
-    FAN_HURRICANE: _xor_frame(_KEY_FAN, 5),
-    FAN_SUPER: _xor_frame(_KEY_FAN, 6),
-    FAN_TOP: _xor_frame(_KEY_FAN, 6),
 }
 
-# Canonical UI name for each accepted fan_mode string (incl. legacy aliases).
-FAN_MODE_CANONICAL: dict[str, str] = {
-    FAN_AUTO: FAN_AUTO,
-    FAN_1: FAN_1,
-    FAN_2: FAN_2,
-    FAN_3: FAN_3,
-    FAN_4: FAN_4,
-    FAN_5: FAN_5,
-    FAN_LOW: FAN_1,
-    FAN_MEDIUM: FAN_2,
-    FAN_HIGH: FAN_3,
-    FAN_STRONG: FAN_4,
-    FAN_HURRICANE: FAN_5,
-    FAN_SUPER: FAN_5,  # protocol 6 collapses to UI "5"
-    FAN_TOP: FAN_5,
-}
-
-# Status index 0→auto, 1→1, 2→2, 3→3 (status only reports 0-3).
-# Indices 4..6 kept for defensive parsing of non-spec frames.
+# Status index 0→auto, 1→low, 2→medium, 3→high (§3.10).
 FAN_MODE_BY_STATUS_INDEX: list[str] = [
     FAN_AUTO,
-    FAN_1,
-    FAN_2,
-    FAN_3,
-    FAN_4,
-    FAN_5,  # protocol 5 (hurricane)
-    FAN_5,  # protocol 6 (super) → same UI label
+    FAN_LOW,
+    FAN_MEDIUM,
+    FAN_HIGH,
 ]
 
 # Vertical swing — protocol key 7 (Appendix values; authoritative over the prose list)
@@ -254,15 +201,12 @@ SWING_HORIZONTAL_MODE_CODES: dict[str, str] = {
 
 # Presets — protocol keys 0x09 (boost), 0x0B (sleep), 0x0E (eco).
 # HA ClimateEntity allows only one active preset_mode at a time. Selecting a preset
-# sends that key's "on" (or sleep level) frame; selecting none / switching presets
+# sends that key's "on" frame; selecting none / switching presets
 # also sends the previous preset's "off" frame when known.
 # Frames use computed XOR (appendix 7.1 has OCR typos for eco-off / mute / light-off).
 PRESET_MODE_CODES: dict[str, str] = {
     PRESET_NONE: _xor_frame(_KEY_SLEEP, 1),  # default "clear" uses sleep-off; see set_preset_mode
     PRESET_SLEEP: _xor_frame(_KEY_SLEEP, 0),
-    PRESET_SLEEP_1: _xor_frame(_KEY_SLEEP, 2),
-    PRESET_SLEEP_2: _xor_frame(_KEY_SLEEP, 3),
-    PRESET_SLEEP_3: _xor_frame(_KEY_SLEEP, 4),
     PRESET_ECO: _xor_frame(_KEY_ECO, 0),
     PRESET_BOOST: _xor_frame(_KEY_BOOST, 0),
 }
@@ -270,23 +214,10 @@ PRESET_MODE_CODES: dict[str, str] = {
 # Off frames used when leaving a preset (or selecting none).
 PRESET_OFF_CODES: dict[str, str] = {
     PRESET_SLEEP: _xor_frame(_KEY_SLEEP, 1),
-    PRESET_SLEEP_1: _xor_frame(_KEY_SLEEP, 1),
-    PRESET_SLEEP_2: _xor_frame(_KEY_SLEEP, 1),
-    PRESET_SLEEP_3: _xor_frame(_KEY_SLEEP, 1),
     PRESET_ECO: _xor_frame(_KEY_ECO, 1),
     PRESET_BOOST: _xor_frame(_KEY_BOOST, 1),
 }
 
-
-# Modes shown in the UI: auto + numbered 1..5 (legacy aliases omitted)
-FAN_MODES_UI: list[str] = [
-    FAN_AUTO,
-    FAN_1,
-    FAN_2,
-    FAN_3,
-    FAN_4,
-    FAN_5,
-]
 
 # Default vertical swing UI list when YAML swing_modes is omitted.
 SWING_MODES_UI: list[str] = [
@@ -310,9 +241,6 @@ SWING_MODES_UI: list[str] = [
 PRESET_MODES_UI: list[str] = [
     PRESET_NONE,
     PRESET_SLEEP,
-    PRESET_SLEEP_1,
-    PRESET_SLEEP_2,
-    PRESET_SLEEP_3,
     PRESET_ECO,
     PRESET_BOOST,
 ]
@@ -527,7 +455,9 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
             self._target_temperature = last_state.attributes.get("temperature")
         if last_state.attributes.get("fan_mode") is not None:
             restored_fan = last_state.attributes.get("fan_mode")
-            self._fan_mode = FAN_MODE_CANONICAL.get(restored_fan, restored_fan)
+            # Keep only UI modes; ignore legacy aliases from older builds.
+            if restored_fan in FAN_MODE_CODES:
+                self._fan_mode = restored_fan
         if last_state.attributes.get("swing_mode") is not None:
             restored_swing = last_state.attributes.get("swing_mode")
             if restored_swing in self._swing_modes:
@@ -537,7 +467,12 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
             if restored_h in self._swing_horizontal_modes:
                 self._swing_horizontal_mode = restored_h
         if last_state.attributes.get("preset_mode") is not None:
-            self._preset_mode = last_state.attributes.get("preset_mode")
+            restored_preset = last_state.attributes.get("preset_mode")
+            # Legacy sleep_1/2/3 collapsed to single sleep preset.
+            if restored_preset in ("sleep_1", "sleep_2", "sleep_3"):
+                restored_preset = PRESET_SLEEP
+            if restored_preset in PRESET_MODES_UI:
+                self._preset_mode = restored_preset
 
     async def async_sensor_state_listener(self, event):
         new_state = event.data["new_state"]
@@ -581,7 +516,7 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
 
     @property
     def fan_modes(self):
-        return list(FAN_MODES_UI)
+        return list(FAN_MODE_CODES)
 
     @property
     def swing_mode(self):
@@ -671,11 +606,10 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
           power: 0=ON, 1=OFF
           mode:  0=auto,1=cool,2=dry,3=fan,4=heat
           temp:  0=16°C … (protocol documents through 30°C; accept 0..16 for 16..32)
-          fan:   0=auto,1="1",2="2",3="3"  (status only reports 0-3;
-                 extended protocol speeds 4..6 are not in status feedback)
+          fan:   0=auto,1=low,2=medium,3=high
 
-        Swing (keys 5–8), presets (boost/sleep/eco), and fan levels above "3" are
-        never present in this report — local optimistic state is kept after set_* calls.
+        Swing (keys 5–8) and presets (boost/sleep/eco) are never present in this
+        report — local optimistic state is kept after set_* calls.
         """
         if not data or data[0:2] != "08":
             return False
@@ -695,7 +629,7 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
                 raise ValueError(f"Invalid temperature value: {temp}")
             if not self.is_hex(mode) or not 0 <= int(mode, 16) <= 4:
                 raise ValueError(f"Invalid hvac mode value: {mode}")
-            if not self.is_hex(fan) or not 0 <= int(fan, 16) <= 6:
+            if not self.is_hex(fan) or not 0 <= int(fan, 16) <= 3:
                 raise ValueError(f"Invalid fan mode value: {fan}")
 
             self._target_temperature = int(temp, 16) + 16
@@ -759,8 +693,7 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         hex_code = FAN_MODE_CODES.get(fan_mode)
         if hex_code:
-            # Store canonical UI label (auto/1/2/3/4/5), even for legacy aliases
-            self._fan_mode = FAN_MODE_CANONICAL.get(fan_mode, fan_mode)
+            self._fan_mode = fan_mode
             await self.send_command(hex_code)
         else:
             _LOGGER.warning("Error locating code with fan mode '%s'.", fan_mode)
