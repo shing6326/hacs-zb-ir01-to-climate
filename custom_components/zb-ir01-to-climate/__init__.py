@@ -18,6 +18,15 @@ DEVICE_SCHEMA = vol.Schema(
         # No default= here — mutable/callable defaults are unreliable across
         # voluptuous/HA versions; async_setup uses conf.get(...) or [].
         vol.Optional("status_quirks"): vol.All(cv.ensure_list, [cv.string]),
+        # Optional vertical swing_mode list (ClimateEntityFeature.SWING_MODE).
+        # Omitted → full protocol default set in climate.py.
+        # Empty list [] → disable SWING_MODE.
+        # Exactly [on, off] → map those labels to auto-sweep key 0x05.
+        vol.Optional("swing_modes"): vol.All(cv.ensure_list, [cv.string]),
+        # Optional independent horizontal swing list (HA 2024.12+).
+        # Omitted or empty → no SWING_HORIZONTAL_MODE feature.
+        # Non-empty → enable only the listed horizontal modes.
+        vol.Optional("swing_horizontal_modes"): vol.All(cv.ensure_list, [cv.string]),
     }
 )
 
@@ -39,6 +48,12 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             "climate_id": conf.get("climate_id"),
             "climate_name": conf["climate_name"],
             "status_quirks": list(conf.get("status_quirks") or []),
+            # Preserve omitted vs [] for swing_modes (None = use climate default).
+            "swing_modes": (
+                list(conf["swing_modes"]) if "swing_modes" in conf else None
+            ),
+            # Omitted and [] both mean horizontal swing disabled.
+            "swing_horizontal_modes": list(conf.get("swing_horizontal_modes") or []),
         }
         hass.async_create_task(
             discovery.async_load_platform(

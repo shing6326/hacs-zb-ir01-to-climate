@@ -4,8 +4,9 @@ Command codes follow Zhiyi Tech Zigbee IR remote protocol (device type 0x01 = AC
   frame: 86 01 <key_id> <value> 00 <xor>
 
 Exposes HVAC / fan / vertical+horizontal swing / manual swing (key 0x06) /
-preset modes (sleep, eco, boost). See HA_LIMITS.md for protocol keys that ClimateEntity
-cannot represent and for status-report gaps.
+preset modes (sleep, eco, boost). Per-device YAML can limit swing_modes /
+swing_horizontal_modes (see __init__.py). See HA_LIMITS.md for protocol keys that
+ClimateEntity cannot represent and for status-report gaps.
 """
 
 from __future__ import annotations
@@ -54,11 +55,19 @@ except AttributeError:  # pragma: no cover - older Core
 
 _LOGGER = logging.getLogger(__name__)
 
-# Custom fan labels for protocol levels beyond HA's built-in constants.
-# Protocol key 4: auto, low, mid, high, strong, hurricane, super
+# Fan UI labels: numbered 1..5 + auto (protocol key 4).
+# Protocol: 0=auto, 1=low→"1", 2=mid→"2", 3=high→"3", 4=strong→"4",
+# 5=hurricane→"5", 6=super→also "5" (UI has five numbered speeds; 5 = strongest
+# selectable; protocol 5 and 6 both surface as "5").
+FAN_1 = "1"
+FAN_2 = "2"
+FAN_3 = "3"
+FAN_4 = "4"
+FAN_5 = "5"
+# Legacy string aliases (accepted by set_fan_mode / restore, not listed in UI)
 FAN_STRONG = "strong"
 FAN_HURRICANE = "hurricane"
-FAN_SUPER = "super"  # also accept FAN_TOP as alias
+FAN_SUPER = "super"
 
 # Vertical swing (protocol key 7) — used as ClimateEntity.swing_mode
 SWING_VERT_UP = "up"
@@ -147,27 +156,55 @@ TEMPERATURE_CODES: dict[str, str] = {
     str(temp): _xor_frame(_KEY_TEMP, temp - 16) for temp in range(16, 33)
 }
 
-# Fan — protocol key 4 (Table 7 / Appendix 7.1). Status report only feeds back 0..3.
+# Fan — protocol key 4 (Table 7 / Appendix 7.1).
+# Status report only feeds back 0..3 (auto/1/2/3). Extended speeds 4..6 are
+# command-only; if seen, 4→"4", 5 and 6→"5".
 FAN_MODE_CODES: dict[str, str] = {
     FAN_AUTO: _xor_frame(_KEY_FAN, 0),
+    FAN_1: _xor_frame(_KEY_FAN, 1),
+    FAN_2: _xor_frame(_KEY_FAN, 2),
+    FAN_3: _xor_frame(_KEY_FAN, 3),
+    FAN_4: _xor_frame(_KEY_FAN, 4),
+    # "5" sends hurricane (protocol 5). Protocol 6 (super) is not a separate UI
+    # mode; legacy aliases below can still emit it.
+    FAN_5: _xor_frame(_KEY_FAN, 5),
+    # Legacy HA / prior-integration aliases → same frames (normalized to 1..5/auto)
     FAN_LOW: _xor_frame(_KEY_FAN, 1),
     FAN_MEDIUM: _xor_frame(_KEY_FAN, 2),
     FAN_HIGH: _xor_frame(_KEY_FAN, 3),
     FAN_STRONG: _xor_frame(_KEY_FAN, 4),
     FAN_HURRICANE: _xor_frame(_KEY_FAN, 5),
     FAN_SUPER: _xor_frame(_KEY_FAN, 6),
-    # HA built-in alias for the top documented speed
     FAN_TOP: _xor_frame(_KEY_FAN, 6),
 }
 
+# Canonical UI name for each accepted fan_mode string (incl. legacy aliases).
+FAN_MODE_CANONICAL: dict[str, str] = {
+    FAN_AUTO: FAN_AUTO,
+    FAN_1: FAN_1,
+    FAN_2: FAN_2,
+    FAN_3: FAN_3,
+    FAN_4: FAN_4,
+    FAN_5: FAN_5,
+    FAN_LOW: FAN_1,
+    FAN_MEDIUM: FAN_2,
+    FAN_HIGH: FAN_3,
+    FAN_STRONG: FAN_4,
+    FAN_HURRICANE: FAN_5,
+    FAN_SUPER: FAN_5,  # protocol 6 collapses to UI "5"
+    FAN_TOP: FAN_5,
+}
+
+# Status index 0→auto, 1→1, 2→2, 3→3 (status only reports 0-3).
+# Indices 4..6 kept for defensive parsing of non-spec frames.
 FAN_MODE_BY_STATUS_INDEX: list[str] = [
     FAN_AUTO,
-    FAN_LOW,
-    FAN_MEDIUM,
-    FAN_HIGH,
-    FAN_STRONG,
-    FAN_HURRICANE,
-    FAN_SUPER,
+    FAN_1,
+    FAN_2,
+    FAN_3,
+    FAN_4,
+    FAN_5,  # protocol 5 (hurricane)
+    FAN_5,  # protocol 6 (super) → same UI label
 ]
 
 # Vertical swing — protocol key 7 (Appendix values; authoritative over the prose list)
@@ -241,17 +278,17 @@ PRESET_OFF_CODES: dict[str, str] = {
 }
 
 
-# Modes shown in the UI (exclude FAN_TOP duplicate alias from the list)
+# Modes shown in the UI: auto + numbered 1..5 (legacy aliases omitted)
 FAN_MODES_UI: list[str] = [
     FAN_AUTO,
-    FAN_LOW,
-    FAN_MEDIUM,
-    FAN_HIGH,
-    FAN_STRONG,
-    FAN_HURRICANE,
-    FAN_SUPER,
+    FAN_1,
+    FAN_2,
+    FAN_3,
+    FAN_4,
+    FAN_5,
 ]
 
+# Default vertical swing UI list when YAML swing_modes is omitted.
 SWING_MODES_UI: list[str] = [
     SWING_OFF,
     SWING_ON,
@@ -280,6 +317,8 @@ PRESET_MODES_UI: list[str] = [
     PRESET_BOOST,
 ]
 
+# Full horizontal catalogue (used only when YAML lists a subset / all of these).
+# Horizontal feature is off unless swing_horizontal_modes is a non-empty list.
 SWING_HORIZONTAL_MODES_UI: list[str] = [
     SWING_HORIZONTAL_OFF,
     SWING_HORIZONTAL_ON,
@@ -312,6 +351,75 @@ KNOWN_STATUS_QUIRKS = {
 }
 
 
+def _resolve_swing_modes(
+    configured: list[str] | None,
+) -> tuple[list[str], dict[str, str]]:
+    """Resolve YAML swing_modes into (ui_list, code_map).
+
+    - None (omitted): full SWING_MODES_UI with SWING_MODE_CODES.
+    - []: empty — caller disables ClimateEntityFeature.SWING_MODE.
+    - Exactly {on, off}: keep those labels but send auto-sweep key 0x05
+      (matches the original integration and remotes without directional vanes).
+    - Any other list: keep known names in order; warn and drop unknowns.
+    """
+    if configured is None:
+        return list(SWING_MODES_UI), dict(SWING_MODE_CODES)
+
+    modes = list(configured)
+    if not modes:
+        return [], {}
+
+    # Special case: only on/off → protocol key 0x05 auto-sweep.
+    if set(modes) == {SWING_ON, SWING_OFF}:
+        # Preserve YAML order for UI.
+        ordered = [m for m in modes if m in (SWING_ON, SWING_OFF)]
+        codes = {
+            SWING_ON: SWING_MODE_CODES[SWING_AUTO_SWEEP_ON],
+            SWING_OFF: SWING_MODE_CODES[SWING_AUTO_SWEEP_OFF],
+        }
+        return ordered, codes
+
+    known = []
+    unknown = []
+    codes: dict[str, str] = {}
+    for name in modes:
+        if name in SWING_MODE_CODES:
+            if name not in known:
+                known.append(name)
+                codes[name] = SWING_MODE_CODES[name]
+        else:
+            unknown.append(name)
+    if unknown:
+        _LOGGER.warning("Ignoring unknown swing_modes: %s", unknown)
+    return known, codes
+
+
+def _resolve_swing_horizontal_modes(
+    configured: list[str] | None,
+) -> tuple[list[str], dict[str, str]]:
+    """Resolve YAML swing_horizontal_modes into (ui_list, code_map).
+
+    - None or []: empty — caller omits SWING_HORIZONTAL_MODE.
+    - Non-empty: keep known names in order; warn and drop unknowns.
+    """
+    if not configured:
+        return [], {}
+
+    known = []
+    unknown = []
+    codes: dict[str, str] = {}
+    for name in configured:
+        if name in SWING_HORIZONTAL_MODE_CODES:
+            if name not in known:
+                known.append(name)
+                codes[name] = SWING_HORIZONTAL_MODE_CODES[name]
+        else:
+            unknown.append(name)
+    if unknown:
+        _LOGGER.warning("Ignoring unknown swing_horizontal_modes: %s", unknown)
+    return known, codes
+
+
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
     if discovery_info is None:
         return
@@ -319,6 +427,16 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     climate_name = discovery_info.get("climate_name")
     climate_id = discovery_info.get("climate_id")
     status_quirks = discovery_info.get("status_quirks") or config.get("status_quirks") or []
+    # None = omitted (use default full set); [] = disable SWING_MODE.
+    if "swing_modes" in discovery_info:
+        swing_modes = discovery_info.get("swing_modes")
+    else:
+        swing_modes = config.get("swing_modes") if config else None
+    # Omitted or [] → no horizontal feature.
+    if "swing_horizontal_modes" in discovery_info:
+        swing_horizontal_modes = discovery_info.get("swing_horizontal_modes") or []
+    else:
+        swing_horizontal_modes = (config.get("swing_horizontal_modes") if config else None) or []
     async_add_entities(
         [
             ZBACClimateEntity(
@@ -327,6 +445,8 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
                 climate_name,
                 climate_id,
                 status_quirks=status_quirks,
+                swing_modes=swing_modes,
+                swing_horizontal_modes=swing_horizontal_modes,
             )
         ]
     )
@@ -344,6 +464,8 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
         climate_name,
         climate_id,
         status_quirks: list[str] | None = None,
+        swing_modes: list[str] | None = None,
+        swing_horizontal_modes: list[str] | None = None,
     ):
         self.hass = hass
         self._ir01_entity_id = ir01_entity_id
@@ -357,8 +479,6 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
         self._hvac_mode: HVACMode | str = HVACMode.OFF
         self._target_temperature: float | None = 26
         self._fan_mode: str | None = FAN_AUTO
-        self._swing_mode: str | None = SWING_OFF
-        self._swing_horizontal_mode: str | None = SWING_HORIZONTAL_OFF
         self._preset_mode: str | None = PRESET_NONE
         self._last_command = ""
         self._last_received_command = ""
@@ -368,6 +488,28 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
         if unknown:
             _LOGGER.warning("Ignoring unknown status_quirks: %s", sorted(unknown))
         self._status_quirks = set(quirks) & KNOWN_STATUS_QUIRKS
+
+        # Per-device swing lists from discovery_info / YAML (see module helpers).
+        self._swing_modes, self._swing_mode_codes = _resolve_swing_modes(swing_modes)
+        (
+            self._swing_horizontal_modes,
+            self._swing_horizontal_mode_codes,
+        ) = _resolve_swing_horizontal_modes(swing_horizontal_modes)
+
+        # Default current values: prefer "off" labels when exposed, else first mode.
+        if SWING_OFF in self._swing_modes:
+            self._swing_mode: str | None = SWING_OFF
+        elif self._swing_modes:
+            self._swing_mode = self._swing_modes[0]
+        else:
+            self._swing_mode = None
+
+        if SWING_HORIZONTAL_OFF in self._swing_horizontal_modes:
+            self._swing_horizontal_mode: str | None = SWING_HORIZONTAL_OFF
+        elif self._swing_horizontal_modes:
+            self._swing_horizontal_mode = self._swing_horizontal_modes[0]
+        else:
+            self._swing_horizontal_mode = None
 
         self._sensor_unsub = async_track_state_change_event(
             self.hass,
@@ -384,13 +526,16 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
         if last_state.attributes.get("temperature") is not None:
             self._target_temperature = last_state.attributes.get("temperature")
         if last_state.attributes.get("fan_mode") is not None:
-            self._fan_mode = last_state.attributes.get("fan_mode")
+            restored_fan = last_state.attributes.get("fan_mode")
+            self._fan_mode = FAN_MODE_CANONICAL.get(restored_fan, restored_fan)
         if last_state.attributes.get("swing_mode") is not None:
-            self._swing_mode = last_state.attributes.get("swing_mode")
+            restored_swing = last_state.attributes.get("swing_mode")
+            if restored_swing in self._swing_modes:
+                self._swing_mode = restored_swing
         if last_state.attributes.get("swing_horizontal_mode") is not None:
-            self._swing_horizontal_mode = last_state.attributes.get(
-                "swing_horizontal_mode"
-            )
+            restored_h = last_state.attributes.get("swing_horizontal_mode")
+            if restored_h in self._swing_horizontal_modes:
+                self._swing_horizontal_mode = restored_h
         if last_state.attributes.get("preset_mode") is not None:
             self._preset_mode = last_state.attributes.get("preset_mode")
 
@@ -444,7 +589,7 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
 
     @property
     def swing_modes(self):
-        return list(SWING_MODES_UI)
+        return list(self._swing_modes)
 
     @property
     def swing_horizontal_mode(self):
@@ -452,7 +597,7 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
 
     @property
     def swing_horizontal_modes(self):
-        return list(SWING_HORIZONTAL_MODES_UI)
+        return list(self._swing_horizontal_modes)
 
     @property
     def preset_mode(self):
@@ -469,10 +614,13 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
             | ClimateEntityFeature.TURN_OFF
             | ClimateEntityFeature.TARGET_TEMPERATURE
             | ClimateEntityFeature.FAN_MODE
-            | ClimateEntityFeature.SWING_MODE
             | ClimateEntityFeature.PRESET_MODE
         )
-        if _SWING_HORIZONTAL_FEATURE:
+        # SWING_MODE only when YAML swing_modes is non-empty (default full set).
+        if self._swing_modes:
+            features |= ClimateEntityFeature.SWING_MODE
+        # Independent horizontal swing is opt-in via non-empty swing_horizontal_modes.
+        if self._swing_horizontal_modes and _SWING_HORIZONTAL_FEATURE:
             features |= _SWING_HORIZONTAL_FEATURE
         return features
 
@@ -523,9 +671,10 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
           power: 0=ON, 1=OFF
           mode:  0=auto,1=cool,2=dry,3=fan,4=heat
           temp:  0=16°C … (protocol documents through 30°C; accept 0..16 for 16..32)
-          fan:   0=auto,1=low,2=mid,3=high  (extended speeds are not in status feedback)
+          fan:   0=auto,1="1",2="2",3="3"  (status only reports 0-3;
+                 extended protocol speeds 4..6 are not in status feedback)
 
-        Swing (keys 5–8), presets (boost/sleep/eco), and fan levels above high are
+        Swing (keys 5–8), presets (boost/sleep/eco), and fan levels above "3" are
         never present in this report — local optimistic state is kept after set_* calls.
         """
         if not data or data[0:2] != "08":
@@ -610,13 +759,17 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         hex_code = FAN_MODE_CODES.get(fan_mode)
         if hex_code:
-            self._fan_mode = fan_mode
+            # Store canonical UI label (auto/1/2/3/4/5), even for legacy aliases
+            self._fan_mode = FAN_MODE_CANONICAL.get(fan_mode, fan_mode)
             await self.send_command(hex_code)
         else:
             _LOGGER.warning("Error locating code with fan mode '%s'.", fan_mode)
 
     async def async_set_swing_mode(self, swing_mode: str) -> None:
-        hex_code = SWING_MODE_CODES.get(swing_mode)
+        if swing_mode not in self._swing_modes:
+            _LOGGER.warning("Unsupported swing mode '%s'.", swing_mode)
+            return
+        hex_code = self._swing_mode_codes.get(swing_mode)
         if hex_code:
             self._swing_mode = swing_mode
             await self.send_command(hex_code)
@@ -624,7 +777,12 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
             _LOGGER.warning("Error locating code with swing mode '%s'.", swing_mode)
 
     async def async_set_swing_horizontal_mode(self, swing_horizontal_mode: str) -> None:
-        hex_code = SWING_HORIZONTAL_MODE_CODES.get(swing_horizontal_mode)
+        if swing_horizontal_mode not in self._swing_horizontal_modes:
+            _LOGGER.warning(
+                "Unsupported horizontal swing mode '%s'.", swing_horizontal_mode
+            )
+            return
+        hex_code = self._swing_horizontal_mode_codes.get(swing_horizontal_mode)
         if hex_code:
             self._swing_horizontal_mode = swing_horizontal_mode
             await self.send_command(hex_code)
