@@ -398,6 +398,9 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
         self.hass = hass
         self._ir01_entity_id = ir01_entity_id
         self._name = climate_name
+        # Registry key. Without it, HA shows the entity but blocks UI settings
+        # (name, area, entity_id). One ZB-IR01 address maps to one climate.
+        self._unique_id = ir01_entity_id
         self.entity_id = climate_id or None
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
         self._attr_min_temp = 16
@@ -481,6 +484,10 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
         self._last_received_command = new_state.state
         if self.parse_sensor_data(new_state.state):
             self.async_write_ha_state()
+
+    @property
+    def unique_id(self):
+        return self._unique_id
 
     @property
     def name(self):
