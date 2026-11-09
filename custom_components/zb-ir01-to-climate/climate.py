@@ -502,7 +502,8 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
         return list(HVAC_MODE_CODES.keys())
 
     @property
-    def target_temperature(self):
+    def native_target_temperature(self) -> float | None:
+        """Return the target temperature in the native unit."""
         return self._target_temperature
 
     @property
