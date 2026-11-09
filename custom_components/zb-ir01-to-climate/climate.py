@@ -402,7 +402,7 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
         # (name, area, entity_id). One ZB-IR01 address maps to one climate.
         self._unique_id = ir01_entity_id
         self.entity_id = climate_id or None
-        self._attr_temperature_unit = UnitOfTemperature.CELSIUS
+        self._attr_native_temperature_unit = UnitOfTemperature.CELSIUS
         self._attr_min_temp = 16
         self._attr_max_temp = 32
         self._attr_target_temperature_step = 1.0
@@ -615,33 +615,53 @@ class ZBACClimateEntity(ClimateEntity, RestoreEntity):
           temp:  0=16°C … (protocol documents through 30°C; accept 0..16 for 16..32)
           fan:   0=auto,1=low,2=medium,3=high
 
+        Temperature or fan equal to 0xFF means that field was left out of this
+        report (seen as 08010107fff0 and 08ff00ff0008). The previous value is
+        kept so power and mode still update. clamp_ff_fan_to_low rewrites fan
+        0xFF to low before this check.
+
         Swing (keys 5–8) and presets (boost/sleep/eco) are never present in this
         report — local optimistic state is kept after set_* calls.
         """
-        if not data or data[0:2] != "08":
+        if not data or data[0:2].lower() != "08":
             return False
         try:
             if not self.verify_checksum(data):
                 raise ValueError("Invalid checksum.")
-            power = data[2:4]
-            mode = data[4:6]
-            temp = data[6:8]
-            fan = data[8:10]
+            power = data[2:4].lower()
+            mode = data[4:6].lower()
+            temp = data[6:8].lower()
+            fan = data[8:10].lower()
 
             power, mode, fan = self._apply_status_quirks(power, mode, fan)
 
             if power not in ("00", "01"):
                 raise ValueError(f"Invalid power value: {power}")
-            if not self.is_hex(temp) or not 0 <= int(temp, 16) <= 16:
-                raise ValueError(f"Invalid temperature value: {temp}")
             if not self.is_hex(mode) or not 0 <= int(mode, 16) <= 4:
                 raise ValueError(f"Invalid hvac mode value: {mode}")
-            if not self.is_hex(fan) or not 0 <= int(fan, 16) <= 3:
-                raise ValueError(f"Invalid fan mode value: {fan}")
 
-            self._target_temperature = int(temp, 16) + 16
-            fan_idx = int(fan, 16)
-            self._fan_mode = FAN_MODE_BY_STATUS_INDEX[fan_idx]
+            # 0xFF = this field was not included. Keep the last known value.
+            if temp == "ff":
+                _LOGGER.debug(
+                    "Status report '%s' omitted temperature; keeping %s",
+                    data,
+                    self._target_temperature,
+                )
+            elif not self.is_hex(temp) or not 0 <= int(temp, 16) <= 16:
+                raise ValueError(f"Invalid temperature value: {temp}")
+            else:
+                self._target_temperature = int(temp, 16) + 16
+
+            if fan == "ff":
+                _LOGGER.debug(
+                    "Status report '%s' omitted fan mode; keeping %s",
+                    data,
+                    self._fan_mode,
+                )
+            elif not self.is_hex(fan) or not 0 <= int(fan, 16) <= 3:
+                raise ValueError(f"Invalid fan mode value: {fan}")
+            else:
+                self._fan_mode = FAN_MODE_BY_STATUS_INDEX[int(fan, 16)]
 
             if power == "01":
                 self._hvac_mode = HVACMode.OFF
